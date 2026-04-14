@@ -1,6 +1,6 @@
 module Settings
   # Токен доступа сообщества ВКонтакте
-  ACCESS_TOKEN = 'vk1.a.mEq_IjMWj7wa6Mi9qe4iQoMHRCoB-wTNb0i41iXFaLtVzcdO5CRUciA-g1Piy34iqKrM5avYNMxNlWJUvPSyTNNGWzVDwgtLbpr59ZxtUVwJEql9-1TQSd6wlSsOyyrjN4Cv8bT7l3_H7ZLWbcs-qd8QB9lxgDzvsWZLEgL0ljQNqvzVm015ptSoEFqaTLkmzx4fmkN-M6YZx-QGUUhqxQ' # пока вместо него пустая строка
+  ACCESS_TOKEN = 'vk1.a.0TITbe2KxwlZfG-P15QRDooq4onD-nqZwyd1jxDzrPxv2gaxvzVDKaEnKPEVNHMkjMav0NsIkbHUZsR3vAj4FZnUYg96OxU2X1cc6SjwFyJ8l3qQnjH0wwkkGCeyeOLussQAGc6mFINxcgTu97teVE-GDx4Gl5A_dEM-nJueqBXIubWMTy0grd7eDDr-8p2ST1G2Ox08jGRxLaizx1xvsA'
   
   # Настройки бота (пока такие)
   POINTS_PER_ANSWER = 10

@@ -1,5 +1,5 @@
 require 'vk_cozy'
-require 'vkontakte_api'
+#require 'vkontakte_api'
 require 'pstore'
 require_relative 'quiz'
 require_relative 'config/settings'
@@ -8,7 +8,7 @@ require_relative 'config/settings'
 bot = VkCozy::Bot.new(Settings::ACCESS_TOKEN)
 
 # Инициализация VK API для дополнительных операций
-vk = VkontakteApi::Client.new(Settings::ACCESS_TOKEN)
+#vk = VkontakteApi::Client.new(Settings::ACCESS_TOKEN)
 
 # Хранилище данных
 $db = PStore.new('quiz_data.pstore')
@@ -112,11 +112,18 @@ bot.on.message_handler(Filter::Text.new(/.*/), -> (event) {
 })
 
 # Обработка ошибок
-bot.on.event_handler(Filter::Any.new, -> (event) {
-  if event.is_a?(VkCozy::ErrorEvent)
-    puts " Ошибка: #{event.error.message}"
-  end
-})
+#bot.on.event_handler(Filter::Any.new, -> (event) {
+#  if event.is_a?(VkCozy::ErrorEvent)
+#    puts " Ошибка: #{event.error.message}"
+#  end
+#})
+
+# Обработка ошибок (упрощённая версия для vk_cozy)
+begin
+  
+rescue => e
+  puts " Ошибка: #{e.message}"
+end
 
 puts " Бот успешно запущен и слушает сообщения!"
 

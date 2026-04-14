@@ -373,12 +373,6 @@ class Quiz
   end
   
   def get_user_name(api, user_id)
-    begin
-      response = api.users_get(user_ids: [user_id])
-      user = response.first
-      "#{user['first_name']} #{user['last_name']}"
-    rescue
-      "Участник"
-    end
-  end
+  "Участник"
+end
 end
