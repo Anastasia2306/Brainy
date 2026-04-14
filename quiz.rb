@@ -1,0 +1,384 @@
+require 'pstore'
+require_relative 'question_manager'
+require_relative 'config/settings'
+
+class Quiz
+  def initialize
+    @active_quizzes = {}  # chat_id => текущая викторина
+    @tournaments = {}     # chat_id => турнир
+    @question_manager = QuestionManager.new
+  end
+  
+  # ========== БЫСТРЫЙ РЕЖИМ ==========
+  
+  def start_fast_quiz(event, theme = nil)
+    chat_id = event.message.peer_id
+    user_id = event.message.from_id
+    
+    # Проверяем, не запущена ли уже викторина
+    if @active_quizzes[chat_id]
+      event.answer(" В этом чате уже идет викторина! Дождитесь окончания.")
+      return
+    end
+    
+    # Получаем случайный вопрос
+    question = @question_manager.get_random_question(theme)
+    
+    if question.nil?
+      event.answer(" Вопросы не найдены" + (theme ? " по теме '#{theme}'" : ""))
+      return
+    end
+    
+    # Запускаем викторину
+    @active_quizzes[chat_id] = {
+      question: question,
+      start_time: Time.now,
+      theme: theme,
+      attempts: {}
+    }
+    
+    # Отправляем вопрос
+    theme_text = theme ? "\n Тема: #{theme}" : ""
+    event.answer(" БЫСТРАЯ ВИКТОРИНА!#{theme_text}\n\n #{question[:question]}\n\n У вас #{Settings::ANSWER_TIMEOUT} секунд!")
+    
+    # Таймер на завершение по времени
+    Thread.new do
+      sleep(Settings::ANSWER_TIMEOUT)
+      timeout_quiz(chat_id, event.api) if @active_quizzes[chat_id]
+    end
+  end
+  
+  def handle_answer(event)
+    chat_id = event.message.peer_id
+    user_id = event.message.from_id
+    user_answer = event.message.text.strip
+    
+    # Проверяем, запущена ли викторина
+    current_quiz = @active_quizzes[chat_id]
+    return unless current_quiz
+    
+    # Проверяем, не отвечал ли уже пользователь
+    if current_quiz[:attempts][user_id]
+      event.answer(" @id#{user_id}, вы уже пробовали ответить!")
+      return
+    end
+    
+    question = current_quiz[:question]
+    correct_answer = question[:answer].downcase
+    
+    # Запоминаем попытку
+    current_quiz[:attempts][user_id] = true
+    
+    if user_answer.downcase == correct_answer
+      # Правильный ответ!
+      event.answer(" @id#{user_id}, ВЕРНО! Ответ: #{question[:answer]}\n+10 очков!")
+      
+      award_points(chat_id, user_id, Settings::POINTS_PER_ANSWER)
+      @active_quizzes.delete(chat_id)
+    else
+      event.answer(" @id#{user_id}, неверно. Пробуйте дальше!")
+    end
+  end
+  
+  def timeout_quiz(chat_id, api)
+    quiz = @active_quizzes.delete(chat_id)
+    return unless quiz
+    
+    question = quiz[:question]
+    
+    api.messages_send(
+      peer_id: chat_id,
+      message: " Время вышло!\nПравильный ответ: #{question[:answer]}",
+      random_id: 0
+    )
+  end
+  
+  # ========== ТУРНИРНЫЙ РЕЖИМ ==========
+  
+  def start_tournament(event, rounds = 5)
+    chat_id = event.message.peer_id
+    user_id = event.message.from_id
+    
+    if @tournaments[chat_id]
+      event.answer(" В этом чате уже идет турнир!")
+      return
+    end
+    
+    if @question_manager.questions_count < rounds
+      event.answer(" Недостаточно вопросов для турнира из #{rounds} раундов")
+      return
+    end
+    
+    @tournaments[chat_id] = {
+      status: :registration,
+      creator_id: user_id,
+      total_rounds: rounds,
+      current_round: 0,
+      players: {},
+      scores: {},
+      questions: []
+    }
+    
+    event.answer(" ТУРНИР НАЧИНАЕТСЯ!\n\n" +
+                " Регистрация открыта!\n" +
+                " Напишите '/join' для участия\n" +
+                " Организатор напишите '/tournament_start' когда все будут готовы")
+  end
+  
+  def join_tournament(event)
+    chat_id = event.message.peer_id
+    user_id = event.message.from_id
+    
+    tournament = @tournaments[chat_id]
+    return unless tournament
+    
+    if tournament[:status] != :registration
+      event.answer(" Регистрация уже закрыта!")
+      return
+    end
+    
+    if tournament[:players][user_id]
+      event.answer(" @id#{user_id}, вы уже в списке участников!")
+    else
+      tournament[:players][user_id] = {
+        name: get_user_name(event.api, user_id),
+        joined_at: Time.now
+      }
+      tournament[:scores][user_id] = 0
+      
+      event.answer(" @id#{user_id} присоединился к турниру! " +
+                  "Всего участников: #{tournament[:players].size}")
+    end
+  end
+  
+  def begin_tournament_rounds(event)
+    chat_id = event.message.peer_id
+    user_id = event.message.from_id
+    
+    tournament = @tournaments[chat_id]
+    return unless tournament
+    
+    if tournament[:creator_id] != user_id
+      event.answer(" Только организатор может начать турнир!")
+      return
+    end
+    
+    if tournament[:players].empty?
+      event.answer(" Нет зарегистрированных участников!")
+      return
+    end
+    
+    tournament[:status] = :in_progress
+    tournament[:questions] = (0...tournament[:total_rounds]).map { 
+      @question_manager.get_random_question 
+    }
+    
+    event.answer(" ТУРНИР НАЧИНАЕТСЯ!\n" +
+                " Участников: #{tournament[:players].size}\n" +
+                " Раундов: #{tournament[:total_rounds]}\n\n" +
+                "Первый вопрос через 3 секунды...")
+    
+    sleep(3)
+    start_next_round(chat_id, event.api)
+  end
+  
+  def start_next_round(chat_id, api)
+    tournament = @tournaments[chat_id]
+    return unless tournament && tournament[:status] == :in_progress
+    
+    tournament[:current_round] += 1
+    
+    if tournament[:current_round] > tournament[:total_rounds]
+      finish_tournament(chat_id, api)
+      return
+    end
+    
+    question = tournament[:questions][tournament[:current_round] - 1]
+    tournament[:current_question] = question
+    tournament[:round_answers] = {}
+    
+    api.messages_send(
+      peer_id: chat_id,
+      message: " Раунд #{tournament[:current_round]}/#{tournament[:total_rounds]}\n\n" +
+              " #{question[:question]}\n\n" +
+              " 30 секунд на ответ!",
+      random_id: 0
+    )
+    
+    # Таймер на следующий раунд
+    Thread.new do
+      sleep(30)
+      process_tournament_round(chat_id, api)
+    end
+  end
+  
+  def process_tournament_round(chat_id, api)
+    tournament = @tournaments[chat_id]
+    return unless tournament
+    
+    question = tournament[:current_question]
+    correct_answer = question[:answer]
+    
+    # Подсчет результатов раунда
+    round_results = " Результаты раунда #{tournament[:current_round]}:\n\n"
+    round_results += " Правильный ответ: #{correct_answer}\n\n"
+    
+    tournament[:players].each do |user_id, player_data|
+      player_answer = tournament[:round_answers][user_id]
+      
+      if player_answer && player_answer.downcase == correct_answer.downcase
+        tournament[:scores][user_id] += Settings::POINTS_PER_ANSWER
+        round_results += " @id#{user_id}: +#{Settings::POINTS_PER_ANSWER} очков\n"
+      else
+        round_results += " @id#{user_id}: 0 очков\n"
+      end
+    end
+    
+    round_results += "\n Текущий счет:\n"
+    sorted_scores = tournament[:scores].sort_by { |_, score| -score }
+    sorted_scores.each_with_index do |(user_id, score), index|
+      round_results += "#{index + 1}. @id#{user_id}: #{score} очков\n"
+    end
+    
+    api.messages_send(peer_id: chat_id, message: round_results, random_id: 0)
+    
+    sleep(5)
+    start_next_round(chat_id, api)
+  end
+  
+  def handle_tournament_answer(event)
+    chat_id = event.message.peer_id
+    user_id = event.message.from_id
+    user_answer = event.message.text.strip
+    
+    tournament = @tournaments[chat_id]
+    return unless tournament && tournament[:status] == :in_progress
+    
+    # Проверяем, участник ли это
+    unless tournament[:players][user_id]
+      event.answer(" Только зарегистрированные участники могут отвечать!")
+      return
+    end
+    
+    # Проверяем, не отвечал ли уже в этом раунде
+    if tournament[:round_answers][user_id]
+      event.answer(" Вы уже ответили в этом раунде!")
+      return
+    end
+    
+    tournament[:round_answers][user_id] = user_answer
+    event.answer(" Ваш ответ принят!")
+  end
+  
+  def finish_tournament(chat_id, api)
+    tournament = @tournaments.delete(chat_id)
+    return unless tournament
+    
+    # Сохраняем результаты в общий рейтинг
+    $db.transaction do
+      $db[chat_id] ||= {}
+      
+      tournament[:scores].each do |user_id, score|
+        $db[chat_id][user_id] ||= 0
+        $db[chat_id][user_id] += score
+      end
+    end
+    
+    # Формируем финальное сообщение
+    message = " ТУРНИР ЗАВЕРШЕН! 🏆\n\n"
+    message += " Итоговые результаты:\n\n"
+    
+    sorted_scores = tournament[:scores].sort_by { |_, score| -score }
+    medals = ['🥇', '🥈', '🥉']
+    
+    sorted_scores.each_with_index do |(user_id, score), index|
+      medal = index < 3 ? medals[index] : "#{index + 1}."
+      message += "#{medal} @id#{user_id}: #{score} очков\n"
+    end
+    
+    message += "\n🎊 Поздравляем победителей!"
+    
+    api.messages_send(peer_id: chat_id, message: message, random_id: 0)
+  end
+  
+  # ========== РЕЙТИНГ ==========
+  
+  def show_rating(event)
+    chat_id = event.message.peer_id
+    
+    rating_text = "🏆 ОБЩИЙ РЕЙТИНГ ИГРОКОВ 🏆\n\n"
+    
+    $db.transaction(true) do
+      chat_rating = $db.fetch(chat_id, {})
+      
+      if chat_rating.empty?
+        rating_text += "Пока никто не набрал очков. Сыграйте в викторину!"
+      else
+        sorted = chat_rating.sort_by { |_, score| -score }.first(Settings::RATING_LIMIT)
+        
+        sorted.each_with_index do |(user_id, score), index|
+          medal = case index
+                 when 0 then '🥇'
+                 when 1 then '🥈'
+                 when 2 then '🥉'
+                 else "#{index + 1}."
+                 end
+          
+          rating_text += "#{medal} @id#{user_id} - #{score} очков\n"
+        end
+      end
+    end
+    
+    event.answer(rating_text)
+  end
+  
+  def show_themes(event)
+    themes = @question_manager.get_all_themes
+    counts = themes.map { |t| [t, @question_manager.questions_by_theme(t).size] }
+    
+    message = " Доступные темы:\n\n"
+    counts.each do |theme, count|
+      message += "- #{theme} (#{count} вопросов)\n"
+    end
+    
+    event.answer(message)
+  end
+  
+  def show_stats(event)
+    chat_id = event.message.peer_id
+    
+    stats = " СТАТИСТИКА БОТА\n\n"
+    stats += " Всего вопросов в базе: #{@question_manager.questions_count}\n"
+    stats += " Тем: #{@question_manager.get_all_themes.size}\n"
+    
+    $db.transaction(true) do
+      active_players = $db.fetch(chat_id, {}).size
+      stats += " Игроков в рейтинге: #{active_players}\n"
+    end
+    
+    stats += " Активных игр сейчас: #{@active_quizzes.size}\n"
+    stats += " Активных турниров: #{@tournaments.size}"
+    
+    event.answer(stats)
+  end
+  
+  private
+  
+  def award_points(chat_id, user_id, points)
+    $db.transaction do
+      $db[chat_id] ||= {}
+      $db[chat_id][user_id] ||= 0
+      $db[chat_id][user_id] += points
+    end
+  end
+  
+  def get_user_name(api, user_id)
+    begin
+      response = api.users_get(user_ids: [user_id])
+      user = response.first
+      "#{user['first_name']} #{user['last_name']}"
+    rescue
+      "Участник"
+    end
+  end
+end
