@@ -91,7 +91,7 @@ loop do
           
           peer_id = message['peer_id']
           from_id = message['from_id']
-          text = message['text']
+          text = message['text'].to_s
           action = message['action']
           
           puts "📨 Сообщение от #{from_id}: #{text}"
@@ -100,12 +100,16 @@ loop do
           event = Event.new(message_data)
           
           # Приветствие при добавлении бота в чат
-          if action && action['type'] == 'chat_invite_user' && action['member_id'] == -Settings::GROUP_ID
-            quiz_engine.welcome_message(event)
-            next
+          if action && action['type'] == 'chat_invite_user'
+            # ID бота (сообщества) со знаком минус
+            if action['member_id'] == -Settings::GROUP_ID
+              puts "   🎉 Бот добавлен в чат!"
+              quiz_engine.welcome_message(event)
+              next
+            end
           end
           
-          case text.to_s
+          case text
           when '/start', '/help'
             quiz_engine.welcome_message(event)
           when /^\/quiz(\s+(.+))?$/
@@ -128,12 +132,21 @@ loop do
           when '/stats'
             quiz_engine.show_stats(event)
           else
+            # ОТЛАДКА
             tournament = quiz_engine.instance_variable_get(:@tournaments)[peer_id]
+            active_quiz = quiz_engine.instance_variable_get(:@active_quizzes)[peer_id]
+            
+            puts "   🔍 tournament=#{!!tournament}, status=#{tournament ? tournament[:status] : 'N/A'}"
+            puts "   🔍 active_quiz=#{!!active_quiz}"
             
             if tournament && tournament[:status] == :in_progress
-              quiz_engine.handle_tournament_answer(event)
+              puts "   🎯 Вызов handle_tournament_answer"
+              result = quiz_engine.handle_tournament_answer(event)
+              puts "   📤 Результат: #{result}"
             else
-              quiz_engine.handle_answer(event)
+              puts "   🎯 Вызов handle_answer"
+              result = quiz_engine.handle_answer(event)
+              puts "   📤 Результат: #{result}"
             end
           end
         end
@@ -144,6 +157,7 @@ loop do
     
   rescue => e
     puts "⚠️ Ошибка: #{e.message}"
+    puts e.backtrace.first(5)
     sleep(5)
   end
 end
