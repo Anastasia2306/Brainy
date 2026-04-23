@@ -5,47 +5,34 @@ require 'pstore'
 require_relative 'quiz'
 require_relative 'config/settings'
 
-# Инициализация хранилища
 $db = PStore.new('quiz_data.pstore')
-
-# Экземпляр класса с логикой викторины
 quiz_engine = Quiz.new
 
 puts "🤖 Бот запускается..."
 puts "📚 Загружено вопросов: #{quiz_engine.instance_variable_get(:@question_manager).questions_count}"
 
-# Класс для отправки сообщений
 class Api
   def messages_send(params)
     uri = URI.parse("https://api.vk.com/method/messages.send")
     params[:access_token] = Settings::ACCESS_TOKEN
     params[:v] = '5.199'
     params[:random_id] ||= rand(1000000..9999999)
-    
     uri.query = URI.encode_www_form(params)
     Net::HTTP.get_response(uri)
   end
 end
 
-# Эмуляция event объекта
 class Event
   attr_reader :message, :api
-  
   def initialize(message_data)
     @message = Message.new(message_data)
     @api = Api.new
   end
-  
   def answer(text)
-    @api.messages_send(
-      peer_id: @message.peer_id,
-      message: text
-    )
+    @api.messages_send(peer_id: @message.peer_id, message: text)
   end
-  
   class Message
     attr_reader :peer_id, :from_id, :text
-    
     def initialize(data)
       @peer_id = data['peer_id']
       @from_id = data['from_id']
@@ -54,24 +41,16 @@ class Event
   end
 end
 
-# Получение Long Poll сервера для бота
 def get_longpoll_server
   uri = URI.parse("https://api.vk.com/method/groups.getLongPollServer")
-  params = {
-    group_id: Settings::GROUP_ID,
-    access_token: Settings::ACCESS_TOKEN,
-    v: '5.199'
-  }
+  params = { group_id: Settings::GROUP_ID, access_token: Settings::ACCESS_TOKEN, v: '5.199' }
   uri.query = URI.encode_www_form(params)
-  
   response = Net::HTTP.get_response(uri)
   data = JSON.parse(response.body)
-  
   if data['error']
     puts "❌ Ошибка Long Poll: #{data['error']['error_msg']}"
     exit
   end
-  
   data['response']
 end
 
@@ -107,39 +86,28 @@ loop do
         if update['type'] == 'message_new'
           message = update['object']['message']
           
-          peer_id = message['peer_id']
-          from_id = message['from_id']
-          text = message['text']
-          
           # Пропускаем исходящие
           next if message['out'] == 1
           
+          peer_id = message['peer_id']
+          from_id = message['from_id']
+          text = message['text']
+          action = message['action']
+          
           puts "📨 Сообщение от #{from_id}: #{text}"
           
-          message_data = {
-            'peer_id' => peer_id,
-            'from_id' => from_id,
-            'text' => text
-          }
-          
+          message_data = { 'peer_id' => peer_id, 'from_id' => from_id, 'text' => text }
           event = Event.new(message_data)
+          
+          # Приветствие при добавлении бота в чат
+          if action && action['type'] == 'chat_invite_user' && action['member_id'] == -Settings::GROUP_ID
+            quiz_engine.welcome_message(event)
+            next
+          end
           
           case text.to_s
           when '/start', '/help'
-            event.answer(
-              "🎯 Привет! Я бот для викторин и квизов!\n\n" \
-              "📋 Доступные команды:\n" \
-              "🎮 Быстрый режим:\n" \
-              "  /quiz - случайный вопрос\n" \
-              "  /quiz [тема] - вопрос по теме\n" \
-              "  /themes - список тем\n\n" \
-              "🏆 Турнирный режим:\n" \
-              "  /tournament - создать турнир\n" \
-              "  /join - присоединиться\n\n" \
-              "📊 Статистика:\n" \
-              "  /rating - общий рейтинг\n" \
-              "  /stats - статистика бота"
-            )
+            quiz_engine.welcome_message(event)
           when /^\/quiz(\s+(.+))?$/
             match = text.match(/^\/quiz(\s+(.+))?$/)
             theme = match[2] if match[2]
