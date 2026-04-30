@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative '../quiz'
+require_relative '../lib/quiz'
 require 'json'
 require 'pstore'
 

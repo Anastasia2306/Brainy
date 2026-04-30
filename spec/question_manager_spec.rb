@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative '../question_manager'
+require_relative '../lib/question_manager'
 
 RSpec.describe QuestionManager do
   let(:test_file) { 'spec/test_questions.json' }
