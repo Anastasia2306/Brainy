@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../question_manager'
 
 RSpec.describe QuestionManager do
@@ -14,7 +16,7 @@ RSpec.describe QuestionManager do
   end
 
   after do
-    File.delete(test_file) if File.exist?(test_file)
+    FileUtils.rm_f(test_file)
   end
 
   describe '#initialize' do
@@ -42,7 +44,7 @@ RSpec.describe QuestionManager do
   describe '#get_all_themes' do
     it 'возвращает список уникальных тем' do
       manager = QuestionManager.new(test_file)
-      expect(manager.get_all_themes).to eq(['История', 'Наука'])
+      expect(manager.get_all_themes).to eq(%w[История Наука])
     end
   end
 

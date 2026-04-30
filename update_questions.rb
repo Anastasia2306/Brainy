@@ -1,13 +1,14 @@
+# frozen_string_literal: true
+
 require 'json'
 require 'net/http'
 require 'uri'
 require 'cgi'
-require 'set'
 
 class QuestionsUpdater
   API_URL = 'https://opentdb.com/api.php?amount=50&type=multiple'
   TRANSLATE_API = 'https://api.mymemory.translated.net/get'
-  
+
   THEME_TRANSLATIONS = {
     'General Knowledge' => 'Общие знания',
     'Entertainment: Books' => 'Литература',
@@ -32,26 +33,26 @@ class QuestionsUpdater
     'Celebrities' => 'Знаменитости',
     'Animals' => 'Животные',
     'Vehicles' => 'Транспорт'
-  }
+  }.freeze
 
   def initialize(file_path = 'data/questions.json')
     @file_path = file_path
     @stats = { added: 0, skipped: 0 }
-    @translation_cache = {}  # Кеш переводов
+    @translation_cache = {} # Кеш переводов
   end
 
   def update
-    puts "📥 Скачиваю вопросы..."
+    puts '📥 Скачиваю вопросы...'
     new_questions = fetch_questions
     if new_questions.empty?
-      puts "❌ Ничего не получено"
+      puts '❌ Ничего не получено'
       return
     end
     puts "✅ Получено #{new_questions.size} вопросов"
-    
-    puts "🌐 Перевожу..."
+
+    puts '🌐 Перевожу...'
     translated = translate_questions(new_questions)
-    
+
     existing = load_existing
     puts "📁 В базе #{existing.size} вопросов"
     merged = merge_questions(existing, translated)
@@ -65,49 +66,49 @@ class QuestionsUpdater
     uri = URI(API_URL)
     response = Net::HTTP.get(uri)
     data = JSON.parse(response, symbolize_names: true)
-    data[:response_code] == 0 ? data[:results] : []
-  rescue => e
+    data[:response_code].zero? ? data[:results] : []
+  rescue StandardError => e
     puts "❌ Ошибка: #{e.message}"
     []
   end
 
   def translate_text(text, source = 'en', target = 'ru')
     return text if text.nil? || text.empty?
-    
+
     # Проверяем кеш
     cache_key = "#{text}:#{target}"
     return @translation_cache[cache_key] if @translation_cache[cache_key]
-    
+
     uri = URI(TRANSLATE_API)
     params = { q: text, langpair: "#{source}|#{target}" }
     uri.query = URI.encode_www_form(params)
-    
+
     response = Net::HTTP.get(uri)
     data = JSON.parse(response)
-    
+
     translated = if data['responseStatus'] == 200
-      data['responseData']['translatedText']
-    else
-      text
-    end
-    
+                   data['responseData']['translatedText']
+                 else
+                   text
+                 end
+
     @translation_cache[cache_key] = translated
     translated
-  rescue
+  rescue StandardError
     text
   end
 
   def translate_questions(questions)
     total = questions.size
     translated = []
-    
+
     questions.each_with_index do |q, index|
-      print "\r   🔄 #{index + 1}/#{total}" if (index % 5 == 0)
-      
+      print "\r   🔄 #{index + 1}/#{total}" if (index % 5).zero?
+
       theme = THEME_TRANSLATIONS[q[:category]] || q[:category]
       question_ru = translate_text(CGI.unescapeHTML(q[:question]))
       answer_ru = translate_text(CGI.unescapeHTML(q[:correct_answer]))
-      
+
       translated << {
         theme: theme,
         question: question_ru,
@@ -115,7 +116,7 @@ class QuestionsUpdater
         difficulty: translate_difficulty(q[:difficulty])
       }
     end
-    
+
     puts "\r   ✅ Переведено #{total} вопросов"
     translated
   end
@@ -131,15 +132,16 @@ class QuestionsUpdater
 
   def load_existing
     return [] unless File.exist?(@file_path)
+
     JSON.parse(File.read(@file_path), symbolize_names: true)
-  rescue
+  rescue StandardError
     []
   end
 
   def merge_questions(existing, new)
-    existing_texts = existing.map { |q| normalize_question(q[:question]) }.to_set
+    existing_texts = existing.to_set { |q| normalize_question(q[:question]) }
     max_id = existing.map { |q| q[:id] }.compact.max || 0
-    
+
     new.each do |question|
       if existing_texts.include?(normalize_question(question[:question]))
         @stats[:skipped] += 1
@@ -163,10 +165,10 @@ class QuestionsUpdater
   end
 end
 
-if __FILE__ == $0
-  puts "=" * 50
-  puts "🔄 БАЗА ВОПРОСОВ (с переводом)"
-  puts "=" * 50
+if __FILE__ == $PROGRAM_NAME
+  puts '=' * 50
+  puts '🔄 БАЗА ВОПРОСОВ (с переводом)'
+  puts '=' * 50
   QuestionsUpdater.new.update
-  puts "✨ Готово!"
+  puts '✨ Готово!'
 end
