@@ -4,7 +4,9 @@ require 'net/http'
 require 'uri'
 require 'json'
 require 'pstore'
-require_relative 'quiz'
+require_relative 'lib/quiz'
+require_relative 'lib/event'
+require_relative 'lib/keyboards'
 require_relative 'config/settings'
 
 $db = PStore.new('quiz_data.pstore')
@@ -12,66 +14,6 @@ quiz_engine = Quiz.new
 
 puts '🤖 Бот запускается...'
 puts "📚 Загружено вопросов: #{quiz_engine.instance_variable_get(:@question_manager).questions_count}"
-
-class Api
-  def messages_send(params)
-    uri = URI.parse('https://api.vk.com/method/messages.send')
-    params[:access_token] = Settings::ACCESS_TOKEN
-    params[:v] = '5.199'
-    params[:random_id] ||= rand(1_000_000..9_999_999)
-    uri.query = URI.encode_www_form(params)
-    Net::HTTP.get_response(uri)
-  end
-end
-
-class Event
-  attr_reader :message, :api
-
-  def initialize(message_data)
-    @message = Message.new(message_data)
-    @api = Api.new
-  end
-
-  def answer(text, keyboard: nil)
-    params = { peer_id: @message.peer_id, message: text }
-    params[:keyboard] = keyboard.to_json if keyboard
-    @api.messages_send(params)
-  end
-
-  class Message
-    attr_reader :peer_id, :from_id, :text
-
-    def initialize(data)
-      @peer_id = data['peer_id']
-      @from_id = data['from_id']
-      @text = data['text']
-    end
-  end
-end
-
-# Клавиатуры
-module Keyboards
-  MAIN = {
-    one_time: false,
-    buttons: [
-      [{ action: { type: 'text', label: '🎮 Викторина' }, color: 'primary' },
-       { action: { type: 'text', label: '📚 Темы' }, color: 'default' }],
-      [{ action: { type: 'text', label: '🏆 Турнир' }, color: 'positive' },
-       { action: { type: 'text', label: '⭐ Рейтинг' }, color: 'default' }],
-      [{ action: { type: 'text', label: '📊 Статистика' }, color: 'default' },
-       { action: { type: 'text', label: '❓ Помощь' }, color: 'default' }]
-    ]
-  }.freeze
-
-  TOURNAMENT = {
-    one_time: false,
-    buttons: [
-      [{ action: { type: 'text', label: '➕ Присоединиться' }, color: 'positive' }],
-      [{ action: { type: 'text', label: '🚀 Начать турнир' }, color: 'primary' }],
-      [{ action: { type: 'text', label: '◀ Назад' }, color: 'default' }]
-    ]
-  }.freeze
-end
 
 def get_longpoll_server
   uri = URI.parse('https://api.vk.com/method/groups.getLongPollServer')
@@ -92,7 +34,6 @@ lp_data = get_longpoll_server
 server = lp_data['server']
 key = lp_data['key']
 ts = lp_data['ts']
-
 puts '📡 Подключен к серверу Long Poll'
 
 loop do
@@ -125,31 +66,20 @@ loop do
 
     puts "📨 Сообщение от #{from_id}: #{text}"
 
-    message_data = { 'peer_id' => peer_id, 'from_id' => from_id, 'text' => text }
-    event = Event.new(message_data)
+    event = Event.new({ 'peer_id' => peer_id, 'from_id' => from_id, 'text' => text })
 
     # Приветствие при добавлении в чат
     if action && action['type'] == 'chat_invite_user' && (action['member_id'] == -Settings::GROUP_ID)
       puts '   🎉 Бот добавлен в чат!'
-      event.answer(
-        "🎯 Привет! Я бот для викторин!\n\nВыбери действие на клавиатуре или напиши команду:",
-        keyboard: Keyboards::MAIN
-      )
+      quiz_engine.welcome_message(event, keyboard: Keyboards::MAIN)
       next
     end
 
-    # Очищаем текст от форматирования кнопок [club...|...]
     clean_text = text.to_s.gsub(/\[club\d+\|[^\]]+\]\s*/, '').strip
 
-    puts "   📝 clean_text = '#{clean_text}'"
-
-    # Обработка кнопок и команд
     case clean_text
     when '/start', '/help', '❓ Помощь', 'Помощь'
-      event.answer(
-        "🎯 Brainy — бот для викторин!\n\nВыбери действие:",
-        keyboard: Keyboards::MAIN
-      )
+      quiz_engine.welcome_message(event, keyboard: Keyboards::MAIN)
     when '/quiz', '🎮 Викторина', 'Викторина'
       quiz_engine.start_fast_quiz(event)
     when '/themes', '📚 Темы', 'Темы'
@@ -166,7 +96,6 @@ loop do
     when '/stats', '📊 Статистика', 'Статистика'
       quiz_engine.show_stats(event)
     when '◀ Назад', 'Назад'
-      # Отменяем турнир, если он идёт
       tournament = quiz_engine.instance_variable_get(:@tournaments)[peer_id]
       if tournament
         quiz_engine.instance_variable_get(:@tournaments).delete(peer_id)
@@ -188,6 +117,5 @@ loop do
   ts = events['ts'] if events['ts']
 rescue StandardError => e
   puts "⚠️ Ошибка: #{e.message}"
-  puts e.backtrace.first(5)
   sleep(5)
 end

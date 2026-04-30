@@ -11,20 +11,22 @@ class Quiz
     @question_manager = QuestionManager.new
   end
 
-  def welcome_message(event)
+    def welcome_message(event, keyboard: nil)
     event.answer(
       "🎯 Привет! Я бот для викторин и квизов!\n\n" \
-      "📋 Доступные команды:\n" \
+      "📋 Доступные команды:\n\n" \
       "🎮 Быстрый режим:\n" \
-      "  /quiz - случайный вопрос\n" \
-      "  /quiz [тема] - вопрос по теме\n" \
-      "  /themes - список тем\n\n" \
+      "  /quiz — случайный вопрос\n" \
+      "  /quiz [тема] — вопрос по теме\n" \
+      "  /themes — список тем\n\n" \
       "🏆 Турнирный режим:\n" \
-      "  /tournament - создать турнир\n" \
-      "  /join - присоединиться к турниру\n\n" \
+      "  /tournament — создать турнир\n" \
+      "  /join — присоединиться к турниру\n" \
+      "  /tournament_start — начать турнир\n\n" \
       "📊 Статистика:\n" \
-      "  /rating - общий рейтинг\n" \
-      '  /stats - статистика бота'
+      "  /rating — общий рейтинг\n" \
+      "  /stats — статистика бота",
+      keyboard: keyboard
     )
   end
 
