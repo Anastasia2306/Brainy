@@ -138,37 +138,48 @@ loop do
       next
     end
 
+    # Очищаем текст от форматирования кнопок [club...|...]
+    clean_text = text.to_s.gsub(/\[club\d+\|[^\]]+\]\s*/, '').strip
+
+    puts "   📝 clean_text = '#{clean_text}'"
+
     # Обработка кнопок и команд
-    case text
-    when '/start', '/help', '❓ Помощь'
+    case clean_text
+    when '/start', '/help', '❓ Помощь', 'Помощь'
       event.answer(
         "🎯 Brainy — бот для викторин!\n\nВыбери действие:",
         keyboard: Keyboards::MAIN
       )
-    when '/quiz', '🎮 Викторина'
+    when '/quiz', '🎮 Викторина', 'Викторина'
       quiz_engine.start_fast_quiz(event)
-    when '/themes', '📚 Темы'
+    when '/themes', '📚 Темы', 'Темы'
       quiz_engine.show_themes(event)
-    when '/tournament', '🏆 Турнир'
+    when '/tournament', '🏆 Турнир', 'Турнир'
       quiz_engine.start_tournament(event)
       event.answer('Управление турниром:', keyboard: Keyboards::TOURNAMENT)
-    when '/join', '➕ Присоединиться'
+    when '/join', '➕ Присоединиться', 'Присоединиться'
       quiz_engine.join_tournament(event)
-    when '/tournament_start', '🚀 Начать турнир'
+    when '/tournament_start', '🚀 Начать турнир', 'Начать турнир'
       quiz_engine.begin_tournament_rounds(event)
-    when '/rating', '⭐ Рейтинг'
+    when '/rating', '⭐ Рейтинг', 'Рейтинг'
       quiz_engine.show_rating(event)
-    when '/stats', '📊 Статистика'
+    when '/stats', '📊 Статистика', 'Статистика'
       quiz_engine.show_stats(event)
-    when '◀ Назад'
+    when '◀ Назад', 'Назад'
+      # Отменяем турнир, если он идёт
+      tournament = quiz_engine.instance_variable_get(:@tournaments)[peer_id]
+      if tournament
+        quiz_engine.instance_variable_get(:@tournaments).delete(peer_id)
+        event.answer('❌ Турнир отменён.')
+      end
       event.answer('Главное меню:', keyboard: Keyboards::MAIN)
     else
       tournament = quiz_engine.instance_variable_get(:@tournaments)[peer_id]
-      quiz_engine.instance_variable_get(:@active_quizzes)[peer_id]
+      active_quiz = quiz_engine.instance_variable_get(:@active_quizzes)[peer_id]
 
       if tournament && tournament[:status] == :in_progress
         quiz_engine.handle_tournament_answer(event)
-      else
+      elsif active_quiz
         quiz_engine.handle_answer(event)
       end
     end
