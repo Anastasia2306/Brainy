@@ -1,6 +1,6 @@
 # Brainy - викторина-бот для ВКонтакте
 
-[![CI](https://github.com/Anastasia2306/vk-quiz-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Anastasia2306/vk-quiz-bot/actions/workflows/ci.yml)
+[![CI](https://github.com/Anastasia2306/вк_бот_Brainy/actions/workflows/ci.yml/badge.svg)](https://github.com/Anastasia2306/вк_бот_Brainy/actions/workflows/ci.yml)
 
 Бот ведёт базу вопросов по разным темам, запускает викторины в чате, следит за очками участников и ведёт общий рейтинг. Можно играть как в быстром режиме (бот кидает вопрос — кто первый ответил, тот молодец), так и в турнирном.
 
