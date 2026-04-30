@@ -16,13 +16,13 @@ RSpec.describe Quiz do
     $db = PStore.new('spec/test_quiz.pstore')
 
     File.write('spec/test_questions.json', JSON.pretty_generate([
-                                                                  { id: 1, theme: 'История',
-                                                                    question: 'Год крещения Руси?', answer: '988', difficulty: 'средняя' },
-                                                                  { id: 2, theme: 'Наука',
-                                                                    question: 'Химический элемент Au?', answer: 'Золото', difficulty: 'легкая' },
-                                                                  { id: 3, theme: 'География',
-                                                                    question: 'Столица Японии?', answer: 'Токио', difficulty: 'легкая' }
-                                                                ]))
+        { id: 1, theme: 'История',
+        question: 'Год крещения Руси?', answer: '988', difficulty: 'средняя' },
+        { id: 2, theme: 'Наука',
+        question: 'Химический элемент Au?', answer: 'Золото', difficulty: 'легкая' },
+        { id: 3, theme: 'География',
+        question: 'Столица Японии?', answer: 'Токио', difficulty: 'легкая' }
+    ]))
 
     # Подменяем менеджер вопросов на тестовый
     quiz.instance_variable_set(:@question_manager, QuestionManager.new('spec/test_questions.json'))

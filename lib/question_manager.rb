@@ -39,6 +39,6 @@ class QuestionManager
   end
 
   def questions_by_theme(theme)
-    @questions.select { |q| q[:theme].downcase == theme.downcase }
+    @questions.select { |q| q[:theme].downcase == theme.downcase } ?
   end
 end

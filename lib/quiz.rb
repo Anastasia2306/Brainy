@@ -2,16 +2,14 @@
 
 require 'pstore'
 require_relative 'question_manager'
-require_relative 'config/settings'
+require_relative '../config/settings'
 
 class Quiz
   def initialize
-    @active_quizzes = {}  # chat_id => текущая викторина
-    @tournaments = {}     # chat_id => турнир
+    @active_quizzes = {}
+    @tournaments = {}
     @question_manager = QuestionManager.new
   end
-
-  # ========== ПРИВЕТСТВИЕ ==========
 
   def welcome_message(event)
     event.answer(
@@ -29,8 +27,6 @@ class Quiz
       '  /stats - статистика бота'
     )
   end
-
-  # ========== БЫСТРЫЙ РЕЖИМ ==========
 
   def start_fast_quiz(event, theme = nil)
     chat_id = event.message.peer_id
@@ -58,7 +54,6 @@ class Quiz
     theme_text = theme ? "\n📚 Тема: #{theme}" : ''
     event.answer("🎯 БЫСТРАЯ ВИКТОРИНА!#{theme_text}\n\n❓ #{question[:question]}\n\n⏱ У вас #{Settings::ANSWER_TIMEOUT} секунд!")
 
-    # Таймер: если никто не ответил за 30 секунд — показываем ответ
     Thread.new do
       sleep(Settings::ANSWER_TIMEOUT)
       if @active_quizzes[chat_id]
@@ -93,16 +88,12 @@ class Quiz
       current_quiz[:answered] = true
       event.answer("🎉 @id#{user_id}, ВЕРНО! Ответ: #{question[:answer]}\n+10 очков!")
       award_points(chat_id, user_id, Settings::POINTS_PER_ANSWER)
-
-      # Завершаем викторину немедленно
       @active_quizzes.delete(chat_id)
       return true
     end
 
     false
   end
-
-  # ========== ТУРНИРНЫЙ РЕЖИМ ==========
 
   def start_tournament(event, rounds = 5)
     chat_id = event.message.peer_id
@@ -126,8 +117,8 @@ class Quiz
     event.answer(
       "🏆 ТУРНИР НАЧИНАЕТСЯ!\n\n" \
       "📋 Регистрация открыта!\n" \
-      "👉 Напишите '/join' или нажмите на кнопку 'Присоединиться' для участия\n" \
-      "👉 Организатор напишите '/tournament_start' или нажмите на кнопку 'Начать турнир' когда все будут готовы"
+      "👉 Напишите '/join' или нажмите на кнопку 'Присоединиться'\n" \
+      "👉 Организатор напишите '/tournament_start' или нажмите 'Начать турнир'"
     )
   end
 
@@ -136,7 +127,6 @@ class Quiz
     user_id = event.message.from_id
 
     tournament = @tournaments[chat_id]
-
     unless tournament
       event.answer('❌ Нет активного турнира')
       return
@@ -175,7 +165,6 @@ class Quiz
 
     tournament[:status] = :in_progress
     tournament[:questions] = (0...tournament[:total_rounds]).map { @question_manager.get_random_question }
-
     event.answer("🎮 ТУРНИР НАЧИНАЕТСЯ!\n👥 Участников: #{tournament[:players].size}")
 
     Thread.new do
@@ -209,7 +198,8 @@ class Quiz
 
     Thread.new do
       sleep(30)
-      if @tournaments[chat_id] && @tournaments[chat_id][:status] == :in_progress && @tournaments[chat_id][:current_round] == tournament[:current_round]
+      t = @tournaments[chat_id]
+      if t && t[:status] == :in_progress && t[:current_round] == tournament[:current_round]
         process_tournament_round(chat_id, api)
       end
     end
@@ -227,9 +217,7 @@ class Quiz
 
     tournament[:players].each_key do |user_id|
       player_answer = tournament[:round_answers][user_id]
-
-      is_correct = false
-      is_correct = (player_answer.to_s.downcase.strip == correct_answer.downcase.strip) if player_answer
+      is_correct = player_answer && (player_answer.to_s.downcase.strip == correct_answer.downcase.strip)
 
       if is_correct
         tournament[:scores][user_id] += Settings::POINTS_PER_ANSWER
@@ -295,8 +283,6 @@ class Quiz
     message += "\n🎊 Поздравляем!"
     api.messages_send(peer_id: chat_id, message: message, random_id: rand(1_000_000..9_999_999))
   end
-
-  # ========== РЕЙТИНГ И СТАТИСТИКА ==========
 
   def show_rating(event)
     chat_id = event.message.peer_id
