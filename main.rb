@@ -32,8 +32,10 @@ class Event
     @api = Api.new
   end
 
-  def answer(text)
-    @api.messages_send(peer_id: @message.peer_id, message: text)
+  def answer(text, keyboard: nil)
+    params = { peer_id: @message.peer_id, message: text }
+    params[:keyboard] = keyboard.to_json if keyboard
+    @api.messages_send(params)
   end
 
   class Message
@@ -45,6 +47,30 @@ class Event
       @text = data['text']
     end
   end
+end
+
+# Клавиатуры
+module Keyboards
+  MAIN = {
+    one_time: false,
+    buttons: [
+      [{ action: { type: 'text', label: '🎮 Викторина' }, color: 'primary' },
+       { action: { type: 'text', label: '📚 Темы' }, color: 'default' }],
+      [{ action: { type: 'text', label: '🏆 Турнир' }, color: 'positive' },
+       { action: { type: 'text', label: '⭐ Рейтинг' }, color: 'default' }],
+      [{ action: { type: 'text', label: '📊 Статистика' }, color: 'default' },
+       { action: { type: 'text', label: '❓ Помощь' }, color: 'default' }]
+    ]
+  }.freeze
+
+  TOURNAMENT = {
+    one_time: false,
+    buttons: [
+      [{ action: { type: 'text', label: '➕ Присоединиться' }, color: 'positive' }],
+      [{ action: { type: 'text', label: '🚀 Начать турнир' }, color: 'primary' }],
+      [{ action: { type: 'text', label: '◀ Назад' }, color: 'default' }]
+    ]
+  }.freeze
 end
 
 def get_longpoll_server
@@ -90,8 +116,6 @@ loop do
     next unless update['type'] == 'message_new'
 
     message = update['object']['message']
-
-    # Пропускаем исходящие
     next if message['out'] == 1
 
     peer_id = message['peer_id']
@@ -104,52 +128,49 @@ loop do
     message_data = { 'peer_id' => peer_id, 'from_id' => from_id, 'text' => text }
     event = Event.new(message_data)
 
-    # Приветствие при добавлении бота в чат
-    # ID бота (сообщества) со знаком минус
+    # Приветствие при добавлении в чат
     if action && action['type'] == 'chat_invite_user' && (action['member_id'] == -Settings::GROUP_ID)
       puts '   🎉 Бот добавлен в чат!'
-      quiz_engine.welcome_message(event)
+      event.answer(
+        "🎯 Привет! Я бот для викторин!\n\nВыбери действие на клавиатуре или напиши команду:",
+        keyboard: Keyboards::MAIN
+      )
       next
     end
 
+    # Обработка кнопок и команд
     case text
-    when '/start', '/help'
-      quiz_engine.welcome_message(event)
-    when %r{^/quiz(\s+(.+))?$}
-      match = text.match(%r{^/quiz(\s+(.+))?$})
-      theme = match[2] if match[2]
-      quiz_engine.start_fast_quiz(event, theme)
-    when '/themes'
+    when '/start', '/help', '❓ Помощь'
+      event.answer(
+        "🎯 Brainy — бот для викторин!\n\nВыбери действие:",
+        keyboard: Keyboards::MAIN
+      )
+    when '/quiz', '🎮 Викторина'
+      quiz_engine.start_fast_quiz(event)
+    when '/themes', '📚 Темы'
       quiz_engine.show_themes(event)
-    when %r{^/tournament(\s+(\d+))?$}
-      match = text.match(%r{^/tournament(\s+(\d+))?$})
-      rounds = match[2] ? match[2].to_i : 5
-      rounds = [[rounds, 3].max, 10].min
-      quiz_engine.start_tournament(event, rounds)
-    when '/join'
+    when '/tournament', '🏆 Турнир'
+      quiz_engine.start_tournament(event)
+      event.answer('Управление турниром:', keyboard: Keyboards::TOURNAMENT)
+    when '/join', '➕ Присоединиться'
       quiz_engine.join_tournament(event)
-    when '/tournament_start'
+    when '/tournament_start', '🚀 Начать турнир'
       quiz_engine.begin_tournament_rounds(event)
-    when '/rating'
+    when '/rating', '⭐ Рейтинг'
       quiz_engine.show_rating(event)
-    when '/stats'
+    when '/stats', '📊 Статистика'
       quiz_engine.show_stats(event)
+    when '◀ Назад'
+      event.answer('Главное меню:', keyboard: Keyboards::MAIN)
     else
-      # ОТЛАДКА
       tournament = quiz_engine.instance_variable_get(:@tournaments)[peer_id]
-      active_quiz = quiz_engine.instance_variable_get(:@active_quizzes)[peer_id]
-
-      puts "   🔍 tournament=#{!tournament.nil?}, status=#{tournament ? tournament[:status] : 'N/A'}"
-      puts "   🔍 active_quiz=#{!active_quiz.nil?}"
+      quiz_engine.instance_variable_get(:@active_quizzes)[peer_id]
 
       if tournament && tournament[:status] == :in_progress
-        puts '   🎯 Вызов handle_tournament_answer'
-        result = quiz_engine.handle_tournament_answer(event)
+        quiz_engine.handle_tournament_answer(event)
       else
-        puts '   🎯 Вызов handle_answer'
-        result = quiz_engine.handle_answer(event)
+        quiz_engine.handle_answer(event)
       end
-      puts "   📤 Результат: #{result}"
     end
   end
 

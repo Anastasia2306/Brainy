@@ -11,16 +11,19 @@ RSpec.describe Quiz do
     stub_const('Settings::POINTS_PER_ANSWER', 10)
     stub_const('Settings::RATING_LIMIT', 10)
     stub_const('Settings::ANSWER_TIMEOUT', 30)
-    
+
     # Создаём тестовую базу данных
     $db = PStore.new('spec/test_quiz.pstore')
 
     File.write('spec/test_questions.json', JSON.pretty_generate([
-      { id: 1, theme: 'История', question: 'Год крещения Руси?', answer: '988', difficulty: 'средняя' },
-      { id: 2, theme: 'Наука', question: 'Химический элемент Au?', answer: 'Золото', difficulty: 'легкая' },
-      { id: 3, theme: 'География', question: 'Столица Японии?', answer: 'Токио', difficulty: 'легкая' }
-    ]))
-    
+                                                                  { id: 1, theme: 'История',
+                                                                    question: 'Год крещения Руси?', answer: '988', difficulty: 'средняя' },
+                                                                  { id: 2, theme: 'Наука',
+                                                                    question: 'Химический элемент Au?', answer: 'Золото', difficulty: 'легкая' },
+                                                                  { id: 3, theme: 'География',
+                                                                    question: 'Столица Японии?', answer: 'Токио', difficulty: 'легкая' }
+                                                                ]))
+
     # Подменяем менеджер вопросов на тестовый
     quiz.instance_variable_set(:@question_manager, QuestionManager.new('spec/test_questions.json'))
   end
@@ -33,8 +36,8 @@ RSpec.describe Quiz do
   let(:event) do
     double('Event',
            message: double('Message',
-                           peer_id: 2000000001,
-                           from_id: 629175124,
+                           peer_id: 2_000_000_001,
+                           from_id: 629_175_124,
                            text: 'ответ пользователя'),
            api: double('Api', messages_send: nil))
   end
@@ -75,8 +78,8 @@ RSpec.describe Quiz do
 
   describe '#handle_answer' do
     before do
-      allow(event.message).to receive(:peer_id).and_return(2000000001)
-      allow(event.message).to receive(:from_id).and_return(629175124)
+      allow(event.message).to receive(:peer_id).and_return(2_000_000_001)
+      allow(event.message).to receive(:from_id).and_return(629_175_124)
       allow(event).to receive(:answer)
     end
 
@@ -87,12 +90,12 @@ RSpec.describe Quiz do
 
     it 'засчитывает правильный ответ' do
       quiz.instance_variable_set(:@active_quizzes, {
-        2000000001 => {
-          question: { id: 1, theme: 'История', question: 'Год?', answer: '988' },
-          attempts: {},
-          answered: false
-        }
-      })
+                                   2_000_000_001 => {
+                                     question: { id: 1, theme: 'История', question: 'Год?', answer: '988' },
+                                     attempts: {},
+                                     answered: false
+                                   }
+                                 })
       allow(event.message).to receive(:text).and_return('988')
       expect(event).to receive(:answer).with(/ВЕРНО/)
       quiz.handle_answer(event)
@@ -100,12 +103,12 @@ RSpec.describe Quiz do
 
     it 'не засчитывает повторный ответ' do
       quiz.instance_variable_set(:@active_quizzes, {
-        2000000001 => {
-          question: { id: 1, theme: 'История', question: 'Год?', answer: '988' },
-          attempts: { 629175124 => true },
-          answered: false
-        }
-      })
+                                   2_000_000_001 => {
+                                     question: { id: 1, theme: 'История', question: 'Год?', answer: '988' },
+                                     attempts: { 629_175_124 => true },
+                                     answered: false
+                                   }
+                                 })
       allow(event.message).to receive(:text).and_return('988')
       expect(quiz.handle_answer(event)).to be false
     end
@@ -148,7 +151,7 @@ RSpec.describe Quiz do
   describe '#show_rating' do
     it 'показывает пустой рейтинг' do
       allow(event).to receive(:answer)
-      allow(event.message).to receive(:peer_id).and_return(2000000001)
+      allow(event.message).to receive(:peer_id).and_return(2_000_000_001)
       expect(event).to receive(:answer).with(/Пока пусто/)
       quiz.show_rating(event)
     end
@@ -166,7 +169,7 @@ RSpec.describe Quiz do
   describe '#show_stats' do
     it 'показывает статистику' do
       allow(event).to receive(:answer)
-      allow(event.message).to receive(:peer_id).and_return(2000000001)
+      allow(event.message).to receive(:peer_id).and_return(2_000_000_001)
       expect(event).to receive(:answer).with(/📊 Статистика/)
       quiz.show_stats(event)
     end
