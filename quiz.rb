@@ -58,9 +58,10 @@ class Quiz
     theme_text = theme ? "\n📚 Тема: #{theme}" : ''
     event.answer("🎯 БЫСТРАЯ ВИКТОРИНА!#{theme_text}\n\n❓ #{question[:question]}\n\n⏱ У вас #{Settings::ANSWER_TIMEOUT} секунд!")
 
+    # Таймер: если никто не ответил за 30 секунд — показываем ответ
     Thread.new do
       sleep(Settings::ANSWER_TIMEOUT)
-      if @active_quizzes[chat_id] && !@active_quizzes[chat_id][:answered]
+      if @active_quizzes[chat_id]
         quiz = @active_quizzes.delete(chat_id)
         if quiz
           event.api.messages_send(
@@ -92,6 +93,8 @@ class Quiz
       current_quiz[:answered] = true
       event.answer("🎉 @id#{user_id}, ВЕРНО! Ответ: #{question[:answer]}\n+10 очков!")
       award_points(chat_id, user_id, Settings::POINTS_PER_ANSWER)
+
+      # Завершаем викторину немедленно
       @active_quizzes.delete(chat_id)
       return true
     end
@@ -99,7 +102,7 @@ class Quiz
     false
   end
 
-  # ========== ТУРНИРНЫЙ РЕЖИМ (без блокирующего sleep) ==========
+  # ========== ТУРНИРНЫЙ РЕЖИМ ==========
 
   def start_tournament(event, rounds = 5)
     chat_id = event.message.peer_id
@@ -175,7 +178,6 @@ class Quiz
 
     event.answer("🎮 ТУРНИР НАЧИНАЕТСЯ!\n👥 Участников: #{tournament[:players].size}")
 
-    # Запускаем первый раунд в отдельном потоке
     Thread.new do
       sleep(3)
       start_next_round(chat_id, event.api)
@@ -205,7 +207,6 @@ class Quiz
       random_id: rand(1_000_000..9_999_999)
     )
 
-    # Таймер в отдельном потоке
     Thread.new do
       sleep(30)
       if @tournaments[chat_id] && @tournaments[chat_id][:status] == :in_progress && @tournaments[chat_id][:current_round] == tournament[:current_round]
@@ -220,9 +221,6 @@ class Quiz
 
     question = tournament[:current_question]
     correct_answer = question[:answer].to_s.strip
-
-    puts '🔍 ОТЛАДКА ТУРНИРА:'
-    puts "   Ответы игроков: #{tournament[:round_answers].inspect}"
 
     round_results = "📊 Результаты раунда #{tournament[:current_round]}:\n\n"
     round_results += "✅ Правильный ответ: #{correct_answer}\n\n"
@@ -271,7 +269,6 @@ class Quiz
 
     if user_answer.downcase.strip == correct_answer.downcase.strip
       tournament[:round_answered] = true
-      # Никакого сообщения! Просто сохраняем, что ответ правильный
     end
 
     true
