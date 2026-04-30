@@ -44,7 +44,7 @@ RSpec.describe Quiz do
 
   describe '#welcome_message' do
     it 'отправляет приветственное сообщение' do
-      expect(event).to receive(:answer).with(/Привет! Я бот/)
+      expect(event).to receive(:answer).with(/Привет! Я бот/, keyboard: nil)
       quiz.welcome_message(event)
     end
   end
